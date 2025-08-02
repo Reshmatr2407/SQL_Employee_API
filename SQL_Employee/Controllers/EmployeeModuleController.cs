@@ -22,15 +22,6 @@ namespace SQL_Employee.Controllers
         }
 
 
-        [HttpGet("Getname/{name}", Name = "Getname")]
-
-        //public async Task<dynamic> Getname([FromRoute] string name)
-        //{
-
-        //    var res = await _service.GetnameService(name);
-        //    return res;
-        //}
-
         [HttpGet("Getallempdetails")]
 
         public async Task<IActionResult> Getallempdetails()
