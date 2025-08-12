@@ -1,5 +1,6 @@
 ﻿
 
+using Dapper;
 using DataAccess.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -23,34 +24,17 @@ namespace SQL_Employee.Controllers
 
 
         [HttpGet("Getallempdetails")]
-
         public async Task<IActionResult> Getallempdetails()
         {
-
-            var cmd = "SELECT * FROM Employee";
-            var employees = new List<EmployeeModel>(); // Assuming EmployeeModel is your model class
-            using (var connection = _context.CreateConnectionCompany())
-            {
-                await connection.OpenAsync();
-                using var command = new SqlCommand(cmd, connection);
-                using (var reader = await command.ExecuteReaderAsync())
-                    while (await reader.ReadAsync())
-                    {
-                        var employee = new EmployeeModel
-                        {
-                            id = reader.GetInt32(reader.GetOrdinal("Id")),
-                            name = reader.GetString(reader.GetOrdinal("Name")),
-                            designation = reader.GetString(reader.GetOrdinal("Designation")),
-                            department = reader.GetString(reader.GetOrdinal("Department")),
-                            // Map other properties as needed
-                        };
-                        employees.Add(employee);
-                    }
-            }
-            // Return the list of employees as a JSON result
-            return Ok(employees);
-            //return Json("Test response");
+            
+                using var connection = _context.CreateConnectionCompany();
+                string query = "SELECT * FROM Employee"; // Query to fetch all employees
+                var employees = await connection.QueryAsync<EmployeeModel>(query); // Using Dapper for query execution
+                return Ok(employees); // Return the list of employees as a JSON result
+            
         }
+
+
         
         [HttpGet("Searchbydept/{dep}", Name = "Searchbyid")]
         public async Task<IActionResult> Searchbydept([FromRoute] string dep)
