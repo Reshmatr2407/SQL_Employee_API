@@ -5,7 +5,9 @@ using DataAccess.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Data.SqlClient;
+using System.Runtime.Intrinsics.Arm;
 using System.Xml.Linq;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace SQL_Employee.Controllers
 {
@@ -22,181 +24,102 @@ namespace SQL_Employee.Controllers
             _context = context;
         }
 
-
+        //select all employees
         [HttpGet("Getallempdetails")]
         public async Task<IActionResult> Getallempdetails()
         {
+
             
-                using var connection = _context.CreateConnectionCompany();
-                string query = "SELECT * FROM Employee"; // Query to fetch all employees
-                var employees = await connection.QueryAsync<EmployeeModel>(query); // Using Dapper for query execution
-                return Ok(employees); // Return the list of employees as a JSON result
-            
+            string query = "SELECT * FROM Employee"; // Query to fetch all employees
+            using var connection = _context.CreateConnectionCompany();
+            var employees = await connection.QueryAsync<EmployeeModel>(query); // Using Dapper for query execution
+            return Ok(employees); // Return the list of employees as a JSON result
+
         }
 
 
-        //public async Task<IActionResult> Getallempdetails()
-        //{
 
-        //    var cmd = "SELECT * FROM Employee";
-        //    var employees = new List<EmployeeModel>(); // Assuming EmployeeModel is your model class
-        //    using (var connection = _context.CreateConnectionCompany())
-        //    {
-        //        await connection.OpenAsync();
-        //        using var command = new SqlCommand(cmd, connection);
-        //        using (var reader = await command.ExecuteReaderAsync())
-        //            while (await reader.ReadAsync())
-        //            {
-        //                var employee = new EmployeeModel
-        //                {
-        //                    id = reader.GetInt32(reader.GetOrdinal("Id")),
-        //                    name = reader.GetString(reader.GetOrdinal("Name")),
-        //                    designation = reader.GetString(reader.GetOrdinal("Designation")),
-        //                    department = reader.GetString(reader.GetOrdinal("Department")),
-        //                    // Map other properties as needed
-        //                };
-        //                employees.Add(employee);
-        //            }
-        //    }
-        //    // Return the list of employees as a JSON result
-        //    return Ok(employees);
-        //    //return Json("Test response");
-        //}
 
-        [HttpGet("Searchbydept/{dep}", Name = "Searchbyid")]
-        public async Task<IActionResult> Searchbydept([FromRoute] string dep)
+        [HttpGet("Searchbydept/{name}/{dep}", Name = "Searchbyid")]
+        public async Task<IActionResult> Searchbydept([FromRoute] string name, string dep)
         {
-            var cmd = "SELECT * FROM Employee WHERE department = @depart";
-            // Use a parameterized query
-            var employees = new List<EmployeeModel>(); // Assuming EmployeeModel is your model class
+            string query = "SELECT * FROM Employee WHERE name = @Name AND department = @Department"; // Use named parameters for Oracle
 
-            using (var connection = _context.CreateConnectionCompany())
-            {
-                await connection.OpenAsync();
-                using var command = new SqlCommand(cmd, connection);
+            var parameters = new { Name = name, Department = dep }; // Create an anonymous object for parameters
 
-                // Add the parameter to the command
-                command.Parameters.AddWithValue("@depart", dep);
+            using var connection = _context.CreateConnectionCompany();
+            var res = await connection.QueryAsync<EmployeeModel>(query, parameters); // Pass the parameters directly
 
-                using (var reader = await command.ExecuteReaderAsync())
-                {
-                    while (await reader.ReadAsync())
-                    {
-                        var employee = new EmployeeModel
-                        {
-                            id = reader.GetInt32(reader.GetOrdinal("Id")),
-                            name = reader.GetString(reader.GetOrdinal("Name")),
-                            designation = reader.GetString(reader.GetOrdinal("Designation")),
-                            department = reader.GetString(reader.GetOrdinal("Department")),
-                            // Map other properties as needed
-                        };
-                        employees.Add(employee);
-                    }
-                }
-            }
-
-            return Ok(employees);
+            return Ok(res); // Return the first result or null if no results found
+            
+        }
+        [HttpGet("Searchbydesignation/{des}")]
+        public async Task<IActionResult> GetRepoQuery2(string des)
+        {
+            string query = "SELECT * FROM Employee WHERE designation = @designa"; // Use named parameters for Oracle
+            var parameters = new { designa = des }; // Create an anonymous object for parameters
+            using var connection = _context.CreateConnectionCompany();
+            var res = await connection.QueryAsync<EmployeeModel>(query, parameters); // Pass the parameters directly
+            return Ok(res); // Return the first result or null if no results found
         }
 
         [HttpPost("InsertEmployee")]
-        public async Task<dynamic> InsertEmployee([FromBody] EmployeeModel employee)
+        public async Task<IActionResult> InsertEmployee([FromBody] EmployeeModel employee)
         {
-            var cmd = "INSERT INTO Employee (Id, Name,designation,department) VALUES (@id, @name,@designation,@department)"; // Use a parameterized query
+            var cmd = "INSERT INTO Employee (Id, Name, designation, department) VALUES (@Id, @Name, @Designation, @Department)"; // Use a parameterized query
+            var parameters = new { Id = employee.id, Name = employee.name, Designation = employee.designation, Department = employee.department };
 
-            using (var connection = _context.CreateConnectionCompany())
+            using var connection = _context.CreateConnectionCompany();
+            var res = await connection.ExecuteAsync(cmd, parameters); // Use ExecuteAsync for Dapper
+
+            if (res > 0) // Check if any rows were affected
             {
-                await connection.OpenAsync();
-                using var command = new SqlCommand(cmd, connection);
-
-                // Add the parameters to the command
-                command.Parameters.AddWithValue("@id", employee.id);
-                command.Parameters.AddWithValue("@name", employee.name);
-                command.Parameters.AddWithValue("@designation", employee.designation);
-                command.Parameters.AddWithValue("@department", employee.department);
-
-                // Execute the command
-                int rowsAffected = await command.ExecuteNonQueryAsync();
-
-                // Check if the insert was successful
-                if (rowsAffected > 0)
-                {
-                    return "Successfully inserted";
-                }
-                else
-                {
-                    return BadRequest("Failed to Insert employee");
-                }
+                return Ok("Successfully inserted"); // Return success message
+            }
+            else
+            {
+                return BadRequest("Insertion failed"); // Return failure message if no rows were affected
             }
         }
-            [HttpPut("ModifyEmployee")]
 
-            public async Task<dynamic> ModifyEmployee([FromBody] EmployeeModel employee)
+
+        [HttpPut("ModifyEmployee")]
+            public async Task<IActionResult> ModifyEmployee([FromBody] EmployeeModel employee)
             {
-                if (employee == null || string.IsNullOrWhiteSpace(employee.name))
-                {
-                    return BadRequest("Invalid employee data.");
-                }
+            var cmd = "UPDATE Employee SET  Name=@name,designation=@designation,department=@department WHERE Id=@id"; // Use a parameterized query
+            var parameters = new { Id = employee.id, Name = employee.name, Designation = employee.designation, Department = employee.department };
 
-                var cmd = "UPDATE Employee SET  Name=@name,designation=@designation,department=@department WHERE Id=@id"; // Use a parameterized query
+            using var connection = _context.CreateConnectionCompany();
+            var res = await connection.ExecuteAsync(cmd, parameters); // Use ExecuteAsync for Dapper
 
-                using (var connection = _context.CreateConnectionCompany())
-                {
-                    await connection.OpenAsync();
-                    using var command = new SqlCommand(cmd, connection);
-
-                    // Add the parameters to the command
-                    command.Parameters.AddWithValue("@id", employee.id);
-                    command.Parameters.AddWithValue("@name", employee.name);
-                    command.Parameters.AddWithValue("@designation", employee.designation);
-                    command.Parameters.AddWithValue("@department", employee.department);
-
-                    //        // Execute the command
-                    int rowsAffected = await command.ExecuteNonQueryAsync();
-
-                    //        // Check if the insert was successful
-                    if (rowsAffected > 0)
-                    {
-                    return "Successfully updated";
-                    }
-                    else
-                    {
-                        return BadRequest("Failed to Modify employee.");
-                    }
-                }
+            if (res > 0)
+            {
+                return Ok("Successfully updated");
             }
-        [HttpDelete("RemoveEmployee", Name = "RemoveEmployee")]
-        public async Task<dynamic> RemoveEmployee([FromBody] EmployeeModel employee)
+            else
+            {
+                return BadRequest("Failed to Modify employee.");
+            }
+            
+            }
+        [HttpDelete("RemoveEmployee/{id}/{name}")]
+        public async Task<dynamic> RemoveEmployee([FromRoute] string id, string name)
         {
-            if (employee == null || string.IsNullOrWhiteSpace(employee.name))
+            var cmd = "DELETE FROM Employee WHERE Id=@id AND Name=@name  "; // Use a parameterized query
+            var parameters = new { Id = id, Name = name};
+
+            using var connection = _context.CreateConnectionCompany();
+            var res = await connection.ExecuteAsync(cmd, parameters); // Use ExecuteAsync for Dapper
+
+            if (res > 0)
             {
-                return BadRequest("Invalid employee data.");
+                return Ok("Successfully deleted");
             }
-
-            var cmd = "DELETE FROM Employee WHERE  Name=@name AND Id=@id"; // Use a parameterized query
-
-            using (var connection = _context.CreateConnectionCompany())
+            else
             {
-                await connection.OpenAsync();
-                using var command = new SqlCommand(cmd, connection);
-
-                // Add the parameters to the command
-                command.Parameters.AddWithValue("@id", employee.id);
-                command.Parameters.AddWithValue("@name", employee.name);
-
-                // Execute the command
-                int rowsAffected = await command.ExecuteNonQueryAsync();
-
-                // Check if the insert was successful
-                if (rowsAffected > 0)
-                {
-                    return "Successfully deleted";
-                }
-                else
-                {
-                    return BadRequest("Failed to Remove employee");
-                }
-
+                return BadRequest("Failed to Delete employee.");
             }
+            
         }
     }
 
